@@ -1,0 +1,261 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <meta charset="utf-8">
+    <title>Create a heatmap layer</title>
+    <meta name="viewport" content="initial-scale=1,maximum-scale=1,user-scalable=no">
+    <link href="https://api.mapbox.com/mapbox-gl-js/v3.5.1/mapbox-gl.css" rel="stylesheet">
+    <script src="https://api.mapbox.com/mapbox-gl-js/v3.5.1/mapbox-gl.js"></script>
+    <script src="https://d3js.org/d3.v7.min.js"></script>
+    <script src="js/rSlider.min.js"></script>
+    <link rel="stylesheet" href="css/rSlider.min.css">
+
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+        }
+
+        #map {
+            position: absolute;
+            top: 0;
+            bottom: 0;
+            width: 100%;
+        }
+
+        #range-slider-container {
+            position: absolute;
+            bottom: 10px;
+            z-index: 10;
+            border-radius: 3px;
+            display: flex;
+            justify-content: center;
+            width: 100%;
+        }
+
+        #range-slider {
+            background-color: rgba(255, 255, 255, 0.8);
+            border-radius: 3px;
+            padding: 10px 20px;
+            width: 80%;
+        }
+    </style>
+</head>
+
+<body>
+    <div id="map"></div>
+
+    <div id="range-slider-container">
+
+        <div id="range-slider">
+            <div class="range">
+                <input type="text" id="slider-range" />
+            </div>
+        </div>
+
+    </div>
+
+    <script>
+
+        const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
+        const fullMonths = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"]
+
+        const appData = {
+            curMonthName: 'Jan',
+            curMonthNumber: 0,
+            data: [],
+        }
+
+        mapboxgl.accessToken = 'pk.eyJ1Ijoic2VyaHV6IiwiYSI6ImNseXpvc3RlczJpbnIya3FscDU2aHc5d3EifQ.FHtPjde_lqensSHZxqthgw';
+        const map = new mapboxgl.Map({
+            container: 'map',
+            // Choose from Mapbox's core styles, or make your own style with Mapbox Studio
+            style: 'mapbox://styles/mapbox/dark-v11',
+            center: [-120, 50],
+            zoom: 2
+        });
+
+        map.on('load', () => {
+
+            d3.csv("https://docs.google.com/spreadsheets/d/e/2PACX-1vRwBZ-R5ooGzSx7NZBPMZCwO_KoX8pwJ5Ia7_I5kZeQauRtRuv-I7-ySzr8XA6BRyDav7-7THX5_Wre/pub?output=csv")
+                .then(data => {
+                    appData.data = data;
+                });
+
+            map.addSource('earthquakes', {
+                'type': 'geojson',
+                'data': {
+                    "type": "FeatureCollection",
+                    "features": []
+                }
+            });
+
+            map.addLayer(
+                {
+                    'id': 'earthquakes-heat',
+                    'type': 'heatmap',
+                    'source': 'earthquakes',
+                    'maxzoom': 9,
+                    'paint': {
+                        // Increase the heatmap weight based on frequency and property magnitude
+                        'heatmap-weight': [
+                            'interpolate',
+                            ['linear'],
+                            ['get', 'mag'],
+                            0,
+                            0,
+                            6,
+                            10
+                        ],
+                        // Increase the heatmap color weight weight by zoom level
+                        // heatmap-intensity is a multiplier on top of heatmap-weight
+                        'heatmap-intensity': [
+                            'interpolate',
+                            ['linear'],
+                            ['zoom'],
+                            0,
+                            1,
+                            9,
+                            3
+                        ],
+                        // Color ramp for heatmap.  Domain is 0 (low) to 1 (high).
+                        // Begin color ramp at 0-stop with a 0-transparancy color
+                        // to create a blur-like effect.
+                        'heatmap-color': [
+                            'interpolate',
+                            ['linear'],
+                            ['heatmap-density'],
+                            0,
+                            'rgba(33,102,172,0)',
+                            0.2,
+                            'rgb(103,169,207)',
+                            0.4,
+                            'rgb(209,229,240)',
+                            0.6,
+                            'rgb(253,219,199)',
+                            0.8,
+                            'rgb(239,138,98)',
+                            1,
+                            'rgb(178,24,43)'
+                        ],
+                        // Adjust the heatmap radius by zoom level
+                        'heatmap-radius': [
+                            'interpolate',
+                            ['linear'],
+                            ['zoom'],
+                            0,
+                            4,  // Doubled from 2
+                            9,
+                            40  // Doubled from 20
+                        ],
+
+                        // Transition from heatmap to circle layer by zoom level
+                        'heatmap-opacity': [
+                            'interpolate',
+                            ['linear'],
+                            ['zoom'],
+                            7,
+                            1,
+                            9,
+                            0
+                        ]
+                    }
+                },
+                'waterway-label'
+            );
+
+            map.addLayer(
+                {
+                    'id': 'earthquakes-point',
+                    'type': 'circle',
+                    'source': 'earthquakes',
+                    'minzoom': 7,
+                    'paint': {
+                        // Size circle radius by earthquake magnitude and zoom level
+                        'circle-radius': ['get', 'mag'],
+                        // Color circle by earthquake magnitude
+                        'circle-color': [
+                            'interpolate',
+                            ['linear'],
+                            ['get', 'mag'],
+                            1,
+                            'rgba(33,102,172,0)',
+                            2,
+                            'rgb(103,169,207)',
+                            3,
+                            'rgb(209,229,240)',
+                            4,
+                            'rgb(253,219,199)',
+                            5,
+                            'rgb(239,138,98)',
+                            6,
+                            'rgb(178,24,43)'
+                        ],
+                        'circle-stroke-color': 'white',
+                        'circle-stroke-width': 1,
+                        'circle-opacity': [
+                            'interpolate',
+                            ['linear'],
+                            ['zoom'],
+                            7,
+                            0,
+                            8,
+                            1
+                        ]
+                    }
+                },
+                'waterway-label'
+            );
+        });
+
+        function updateMap() {
+
+
+            const formattedData = appData.data.map(d => {
+                const month = fullMonths[appData.curMonthNumber];
+                const values = d[month];
+
+                return {
+                    "type": "Feature",
+                    "geometry": {
+                        "type": "Point",
+                        "coordinates": d['Coordinates'].split(",").map(Number)
+                    },
+                    "properties": {
+                        "name": d['Brickyard Name'],
+                        "mag": values !== "" ? parseFloat(values.split(",")[1]) : 0,
+                    },
+                };
+            });
+
+            console.log('Formatted data:', formattedData);
+
+            // Update the map source with new data
+            if (map.getSource('earthquakes')) {
+                map.getSource('earthquakes').setData({
+                    "type": "FeatureCollection",
+                    "features": formattedData
+                });
+            }
+        }
+
+        new rSlider({
+            target: '#slider-range',
+            values: months,
+            range: false,
+            set: [5],
+            tooltip: false,
+            onChange: function (val) {
+                console.log(val);
+                appData.curMonthName = val;
+                appData.curMonthNumber = months.indexOf(val);
+                updateMap();
+            }
+        });
+
+    </script>
+
+</body>
+
+</html>
