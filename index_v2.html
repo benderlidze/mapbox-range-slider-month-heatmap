@@ -1,0 +1,191 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <meta charset="utf-8">
+    <title>Create a heatmap layer</title>
+    <meta name="viewport" content="initial-scale=1,maximum-scale=1,user-scalable=no">
+    <link href="https://api.mapbox.com/mapbox-gl-js/v3.5.1/mapbox-gl.css" rel="stylesheet">
+    <script src="https://api.mapbox.com/mapbox-gl-js/v3.5.1/mapbox-gl.js"></script>
+    <script src="https://d3js.org/d3.v7.min.js"></script>
+    <script src="js/rSlider.min.js"></script>
+    <link rel="stylesheet" href="css/rSlider.min.css">
+
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+        }
+
+        #map {
+            position: absolute;
+            top: 0;
+            bottom: 0;
+            width: 100%;
+        }
+
+        #range-slider-container {
+            position: absolute;
+            bottom: 10px;
+            z-index: 10;
+            border-radius: 3px;
+            display: flex;
+            justify-content: center;
+            width: 100%;
+        }
+
+        #range-slider {
+            background-color: rgba(255, 255, 255, 0.8);
+            border-radius: 3px;
+            padding: 10px 20px;
+            width: 80%;
+        }
+    </style>
+</head>
+
+<body>
+    <div id="map"></div>
+
+    <div id="range-slider-container">
+
+        <div id="range-slider">
+            <div class="range">
+                <input type="text" id="slider-range" />
+            </div>
+        </div>
+
+    </div>
+
+    <script>
+
+        const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
+        const fullMonths = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"]
+
+        const appData = {
+            curMonthName: 'Jan',
+            curMonthNumber: 0,
+            data: [],
+        }
+
+        mapboxgl.accessToken = 'pk.eyJ1Ijoic2VyaHV6IiwiYSI6ImNseXpvc3RlczJpbnIya3FscDU2aHc5d3EifQ.FHtPjde_lqensSHZxqthgw';
+        const map = new mapboxgl.Map({
+            container: 'map',
+            // Choose from Mapbox's core styles, or make your own style with Mapbox Studio
+            style: 'mapbox://styles/mapbox/dark-v11',
+            center: { lng: -96.68639412330958, lat: 39.58305435752865 },
+            zoom: 3.6,
+            projection: 'mercator'
+        });
+
+        map.on('load', () => {
+
+            d3.csv("https://docs.google.com/spreadsheets/d/e/2PACX-1vRwBZ-R5ooGzSx7NZBPMZCwO_KoX8pwJ5Ia7_I5kZeQauRtRuv-I7-ySzr8XA6BRyDav7-7THX5_Wre/pub?gid=1423493790&single=true&output=csv")
+                .then(data => {
+                    appData.data = data;
+
+                    console.log('data', data);
+
+                    const formedData = data.map(d => {
+
+                        const name = d['Brickyard Name'];
+                        const coordinates = d['Coordinates'].split(",").map(Number);
+                        const mData = {};
+
+                        console.log('d', d);
+
+                        for (const [key, value] of Object.entries(d)) {
+                            console.log('key', key);
+                            console.log('value', value);
+                            if (fullMonths.includes(key)) {
+                                mData[key] = value.split(",").map(d => !isNaN(d) ? Number(d) : d);
+                            }
+                        }
+
+                        return {
+                            name,
+                            coordinates,
+                            mData
+                        }
+                    })
+                    console.log('formedData', formedData);
+                });
+
+            map.addSource('earthquakes', {
+                'type': 'geojson',
+                'data': {
+                    "type": "FeatureCollection",
+                    "features": []
+                }
+            });
+
+            map.addLayer(
+                {
+                    'id': 'population',
+                    'type': 'circle',
+                    'source': 'earthquakes',
+                    'paint': {
+                        'circle-radius': ['get', 'mag'],
+                        'circle-radius-transition': {
+                            duration: 800
+                        },
+                        'circle-color': ['get', 'color'],
+                        'circle-opacity': 0.7
+                    }
+                },
+                'aeroway-polygon'
+            );
+
+
+        });
+
+        function updateMap() {
+            const formattedData = appData.data.map(d => {
+                const month = fullMonths[appData.curMonthNumber];
+                const values = d[month];
+
+                return {
+                    "type": "Feature",
+                    "geometry": {
+                        "type": "Point",
+                        "coordinates": d['Coordinates'].split(",").map(Number)
+                    },
+                    "properties": {
+                        "color": //get some random color
+                            `rgb(${Math.floor(Math.random() * 255)}, ${Math.floor(Math.random() * 255)}, ${Math.floor(Math.random() * 255)})`,
+                        "name": d['Brickyard Name'],
+                        "mag": values !== "" ? parseFloat(values.split(",")[1]) : 0,
+                        'size': values !== "" ? parseFloat(values.split(",")[0]) : 0,
+                    },
+                };
+            });
+
+            console.log('Formatted data:', formattedData);
+
+            // Update the map source with new data
+            if (map.getSource('earthquakes')) {
+                map.getSource('earthquakes').setData({
+                    "type": "FeatureCollection",
+                    "features": formattedData
+                });
+            }
+        }
+
+        new rSlider({
+            target: '#slider-range',
+            values: months,
+            range: false,
+            set: [5],
+            tooltip: false,
+            onChange: function (val) {
+                console.log(val);
+                appData.curMonthName = val;
+                appData.curMonthNumber = months.indexOf(val);
+                updateMap();
+            }
+        });
+
+    </script>
+
+</body>
+
+</html>
